@@ -30,7 +30,6 @@ export default class Sketch {
 
     //images
     this.imgs = [img1, img2, img3, img4, img5, img6, img7, img8, img9, img10]
-    console.log(this.imgs)
 
     //scroll
     this.scroll = 0
@@ -45,27 +44,53 @@ export default class Sketch {
 
     this.container.appendChild(this.renderer.domElement)
 
-    this.camera = new THREE.PerspectiveCamera(
-      70,
-      window.innerWidth / window.innerHeight,
-      0.001,
-      1000
+    // this.camera = new THREE.PerspectiveCamera(
+    //   70,
+    //   window.innerWidth / window.innerHeight,
+    //   0.001,
+    //   1000
+    // )
+
+    this.renderTarget = new THREE.WebGLRenderTarget(
+      window.innerWidth,
+      window.innerHeight,
+      {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat,
+      }
     )
 
-    // var frustumSize = 10;
-    // var aspect = window.innerWidth / window.innerHeight;
-    // this.camera = new THREE.OrthographicCamera( frustumSize * aspect / - 2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, -1000, 1000 );
+    const frustumSize = 4
+    let aspect = window.innerWidth / window.innerHeight
+    this.aspect = this.width / this.height
+    this.camera = new THREE.OrthographicCamera(
+      (frustumSize * aspect) / -2,
+      (frustumSize * aspect) / 2,
+      frustumSize / 2,
+      frustumSize / -2,
+      -1000,
+      1000
+    )
     this.camera.position.set(0, 0, 2)
+
     // this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.time = 0
 
     this.isPlaying = true
 
+    // rotate camera on x axis
+    // this.camera.rotation.x = 0.025
+    // this.camera.rotation.y = 0.125
+    // this.camera.rotation.z = 0.1
+
     this.addObjects()
     this.resize()
+    this.initQuad()
     this.render()
     this.scrollEvent()
     this.setupResize()
+
     // this.settings();
   }
 
@@ -76,6 +101,16 @@ export default class Sketch {
     }
     this.gui = new dat.GUI()
     this.gui.add(this.settings, "progress", 0, 1, 0.01)
+  }
+
+  initQuad() {
+    this.sceneQuad = new THREE.Scene()
+    this.materialQuad = new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    this.quad = new THREE.Mesh(
+      new THREE.PlaneBufferGeometry(4 * this.aspect, 4),
+      this.materialQuad
+    )
+    this.sceneQuad.add(this.quad)
   }
 
   setupResize() {
@@ -165,10 +200,16 @@ export default class Sketch {
     this.scroll *= 0.9
     this.scrollTarget *= 0.9
     this.currentScroll += this.scroll * 0.01
+
     this.updateMeshes()
     this.material.uniforms.time.value = this.time
     requestAnimationFrame(this.render.bind(this))
+
+    this.renderer.setRenderTarget(this.renderTarget)
     this.renderer.render(this.scene, this.camera)
+
+    this.renderer.setRenderTarget(null)
+    this.renderer.render(this.sceneQuad, this.camera)
   }
 }
 
