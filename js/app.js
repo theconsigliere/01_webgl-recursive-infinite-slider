@@ -14,6 +14,7 @@ import img7 from "../img/7.jpg"
 import img8 from "../img/8.jpg"
 import img9 from "../img/9.jpg"
 import img10 from "../img/10.jpg"
+import disp from "../img/disp.jpg"
 
 export default class Sketch {
   constructor(options) {
@@ -22,10 +23,13 @@ export default class Sketch {
     this.container = options.dom
     this.width = this.container.offsetWidth
     this.height = this.container.offsetHeight
-    this.renderer = new THREE.WebGLRenderer()
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+    })
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(this.width, this.height)
-    this.renderer.setClearColor(0x000000, 1)
+    // this.renderer.setClearColor(0x000000, 1)
     this.renderer.outputEncoding = THREE.sRGBEncoding
 
     //images
@@ -55,8 +59,18 @@ export default class Sketch {
       window.innerWidth,
       window.innerHeight,
       {
-        minFilter: THREE.LinearFilter,
-        magFilter: THREE.LinearFilter,
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+      }
+    )
+
+    this.renderTargetSecond = new THREE.WebGLRenderTarget(
+      window.innerWidth,
+      window.innerHeight,
+      {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
         format: THREE.RGBAFormat,
       }
     )
@@ -76,6 +90,16 @@ export default class Sketch {
 
     // this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.time = 0
+
+    this.backgroundQuad = new THREE.Mesh(
+      new THREE.PlaneGeometry(4 * this.aspect, 4),
+      new THREE.MeshBasicMaterial({
+        // transparent: true,
+      })
+    )
+    // this.backgroundQuad.position.y = 0.5
+    this.backgroundQuad.position.z = -0.5
+    this.scene.add(this.backgroundQuad)
 
     this.isPlaying = true
 
@@ -105,9 +129,29 @@ export default class Sketch {
 
   initQuad() {
     this.sceneQuad = new THREE.Scene()
-    this.materialQuad = new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    this.materialQuad = new THREE.ShaderMaterial({
+      extensions: {
+        derivatives: "#extension GL_OES_standard_derivatives : enable",
+      },
+      side: THREE.DoubleSide,
+      uniforms: {
+        time: { type: "f", value: 0 },
+        uTexture: { value: null },
+        speed: { value: 0 },
+        dir: { value: 0 },
+        uDisp: { value: new THREE.TextureLoader().load(disp) },
+        resolution: { type: "v4", value: new THREE.Vector4() },
+        uvRate1: {
+          value: new THREE.Vector2(1, 1),
+        },
+      },
+      // wireframe: true,
+      transparent: true,
+      vertexShader: vertex,
+      fragmentShader: fragment,
+    })
     this.quad = new THREE.Mesh(
-      new THREE.PlaneBufferGeometry(4 * this.aspect, 4),
+      new THREE.PlaneGeometry(4 * this.aspect, 4),
       this.materialQuad
     )
     this.sceneQuad.add(this.quad)
@@ -133,6 +177,7 @@ export default class Sketch {
 
   addObjects() {
     let that = this
+
     this.material = new THREE.ShaderMaterial({
       extensions: {
         derivatives: "#extension GL_OES_standard_derivatives : enable",
@@ -202,14 +247,30 @@ export default class Sketch {
     this.currentScroll += this.scroll * 0.01
 
     this.updateMeshes()
-    this.material.uniforms.time.value = this.time
+    // this.material.uniforms.time.value = this.time
     requestAnimationFrame(this.render.bind(this))
 
+    // default texture
     this.renderer.setRenderTarget(this.renderTarget)
     this.renderer.render(this.scene, this.camera)
 
-    this.renderer.setRenderTarget(null)
+    // render distorted texture
+    this.renderer.setRenderTarget(this.renderTargetSecond)
+    // this.renderer.setRenderTarget(null)
+    this.materialQuad.uniforms.uTexture.value = this.renderTarget.texture
+    this.materialQuad.uniforms.speed.value = Math.min(
+      0.3,
+      Math.abs(this.scroll)
+    )
+    this.materialQuad.uniforms.dir.value = Math.sign(this.scroll)
     this.renderer.render(this.sceneQuad, this.camera)
+
+    // FINAL SCENE
+    this.renderer.setRenderTarget(null)
+    this.backgroundQuad.material.map = this.renderTargetSecond.texture
+    this.renderer.render(this.scene, this.camera)
+
+    // this.scene.scale.setScalar(this.time)
   }
 }
 
